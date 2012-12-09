@@ -44,6 +44,10 @@ namespace PS3BluMote
         private SendInputAPI.Keyboard keyboard = null;
         private System.Timers.Timer timerRepeat = null;
 
+        /* SPS ---------------------------------- */
+        private System.Timers.Timer remoteSleepTimer;
+        private int remoteSleepTimer_ms = 0;
+        /* END ---------------------------------- */
         public SettingsForm()
         {
             for (int i = 0; i < buttonMappings.Length; i++)
@@ -52,6 +56,8 @@ namespace PS3BluMote
             }
 
             InitializeComponent();
+
+            
 
             ListViewItem lvItem;
             foreach (PS3Remote.Button button in Enum.GetValues(typeof(PS3Remote.Button)))
@@ -75,6 +81,12 @@ namespace PS3BluMote
             timerRepeat = new System.Timers.Timer();
             timerRepeat.Interval = int.Parse(txtRepeatInterval.Text);
             timerRepeat.Elapsed += new System.Timers.ElapsedEventHandler(timerRepeat_Elapsed);
+            
+            remoteSleepTimer_ms = int.Parse(txtSleepInterval.Text);
+
+            /* SPS ---------------------------------- */
+            doNoSleepYet();
+            /* END ---------------------------------- */
 
             try
             {
@@ -93,6 +105,8 @@ namespace PS3BluMote
 
             keyboard = new SendInputAPI.Keyboard(cbSms.Checked);
         }
+
+        
 
         private void cbDebugMode_CheckedChanged(object sender, EventArgs e)
         {
@@ -141,6 +155,13 @@ namespace PS3BluMote
                         try
                         {
                             txtRepeatInterval.Text = rssNode.SelectSingleNode("settings/repeatinterval").InnerText;
+                        }
+                        catch
+                        { }
+
+                        try
+                        {
+                            txtSleepInterval.Text = rssNode.SelectSingleNode("settings/sleepInterval").InnerText;
                         }
                         catch
                         { }
@@ -272,7 +293,9 @@ namespace PS3BluMote
 
         private void remote_ButtonDown(object sender, PS3Remote.ButtonData e)
         {
+            doNoSleepYet();
             if (DebugLog.isLogging) DebugLog.write("Button down: " + e.button.ToString());
+            
 
             ButtonMapping mapping = buttonMappings[(int)e.button];
 
@@ -294,7 +317,9 @@ namespace PS3BluMote
 
         private void remote_ButtonReleased(object sender, PS3Remote.ButtonData e)
         {
+            doNoSleepYet();
             if (DebugLog.isLogging) DebugLog.write("Button released: " + e.button.ToString());
+            
 
             if (timerRepeat.Enabled)
             {
@@ -308,6 +333,58 @@ namespace PS3BluMote
 
             keyboard.releaseLastKeys();
         }
+
+        /* SPS ---------------------------------- */
+        private void doNoSleepYet()
+        {
+            Console.WriteLine("Sleeptimer restarted");
+            if (remoteSleepTimer != null)
+            {
+                remoteSleepTimer.Elapsed -= remoteSleepTimer_Elapsed;
+                remoteSleepTimer.Stop();
+            }
+
+            if (remoteSleepTimer_ms > 5000)
+            {
+                remoteSleepTimer = new System.Timers.Timer(remoteSleepTimer_ms);
+                remoteSleepTimer.Elapsed += new System.Timers.ElapsedEventHandler(remoteSleepTimer_Elapsed);
+                remoteSleepTimer.Start();
+            }
+        }
+
+        void remoteSleepTimer_Elapsed(object sender, System.Timers.ElapsedEventArgs e)
+        {
+            string Ps3RemoteSleepPath = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) + "\\Ps3RemoteSleep_v1.0.0.0\\Ps3RemoteSleep.exe";
+            if (System.IO.File.Exists(Ps3RemoteSleepPath))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(Ps3RemoteSleepPath);
+                    Console.WriteLine("Sleeptimer ZZZZzzzzz");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("Could not sleep: " + ex.Message);
+                }
+            }
+        }
+
+
+        //try
+        //{
+        //    deviceStateControler.UsbControler.UsbDriver.Close();
+
+        //    string myPath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+        //    System.Diagnostics.Process.Start(jefUploaderPath, "-autoreturn" + " " + myPath);
+        //    System.Windows.Forms.Application.Exit();
+        //}
+        //catch (Exception ex)
+        //{
+        //    MessageBox.Show(this, ex.Message, "Error starting Firmware uploader");
+        //}
+
+
+        /* END ---------------------------------- */
 
         private void remote_Connected(object sender, EventArgs e)
         {
@@ -334,6 +411,7 @@ namespace PS3BluMote
             text += "\t\t<smsinput>" + cbSms.Checked.ToString().ToLower() + "</smsinput>\r\n";
             text += "\t\t<hibernation>" + cbHibernation.Checked.ToString().ToLower() + "</hibernation>\r\n";
             text += "\t\t<repeatinterval>" + txtRepeatInterval.Text + "</repeatinterval>\r\n";
+            text += "\t\t<sleepInterval>" + txtSleepInterval.Text + "</sleepInterval>\r\n";
             text += "\t</settings>\r\n";
             text += "\t<mappings>\r\n";
 
@@ -407,6 +485,18 @@ namespace PS3BluMote
             try
             {
                 int i = int.Parse(txtRepeatInterval.Text);
+            }
+            catch
+            {
+                e.Cancel = true;
+            }
+        }
+
+        private void txtSleepInterval_Validating(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            try
+            {
+                int i = int.Parse(txtSleepInterval.Text);
             }
             catch
             {
